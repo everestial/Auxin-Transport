@@ -3,13 +3,17 @@ title: "Auxin Control Study September 2017 - March 2018"
 author: "Bishwa"
 date: "`r Sys.Date()`"
 output:
+    
+  pdf_document:
+    toc: yes
   html_document:
-    toc: true
-    number_sections: true
+    toc: yes
+    number_sections: yes
     toc_float:
-      collapsed: false
-      smooth_scroll: false
-editor_options: 
+      collapsed: no
+      smooth_scroll: no
+    keep_md: true
+editor_options:
   chunk_output_type: console
 ---
 
@@ -37,7 +41,6 @@ library(sjPlot)
 outliers or contaminated data are; MY2:1 (row number 7), 12, and 24
 
 ```{r readata}
-setwd("Z:/Upwork/Bishwa/Auxin Transport")
 path<- "./auxin_tranportData.xls"
 
 adata<- readxl::read_excel(path = path,sheet = "Sheet1",
