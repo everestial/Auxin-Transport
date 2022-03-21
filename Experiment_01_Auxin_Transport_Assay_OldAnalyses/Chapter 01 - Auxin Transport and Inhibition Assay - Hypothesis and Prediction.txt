@@ -1,0 +1,49 @@
+
+
+Hypothesis:
+	Mayodan population exhibits higher apical dominance compared to Spiterstulen population. 
+	This variation in apical dominance contributes to variation in several key life history traits.
+
+	1) Auxin transport assay (Note: experiment 01, has no technical replicates) 
+	- Individuals from mayodan population exhibit lower apical dominance.
+
+	2) Auxin inhibition assay (Note: experiment 01, this has data only from population Mayodan)
+	- Altering the apical dominance in individuals representing Mayodan population will affect/alter it's life history traits like
+		- shoot architecture (measured by intesity of lateral shoots)
+		- number of reproductive shoots (inflorescence)
+		- change in diameter
+
+Predictions:
+	1) Auxin transport assay
+	- Measure of H3-IAA in inflorescence shoots of Mayodan will show higher transport.
+	
+	2) Auxin inhibition assay
+	- During the month of September (when auxin inhibition has just started)
+		- there should be no significant difference in diameter, lateral shoot rating, number of inflorescence
+	
+	- During the month of December (when auxin inhibition has started showing it's effect)
+		- there should be significant difference in diameter, lateral shoot rating, number of inflorescence
+			between different treatment groups, treatment levels
+		- this significant difference should not stem from family based differences.
+		  i.e the ANOVA test of significance should account for family based effects. We expect family based effects is not significant.
+		
+		- Other possible tests?
+			- Does lateral shoot rating affect diameter changes?
+			- Does lateral shoot rating affect number of inflorescences?
+
+		- Effects of treatment over time
+		  NPA-Sep		NPA-Dec		NPA-March
+		  WD-Sep		WD-Dec		WD-March
+		
+
+	- During the month of March (when auxin inhibition had been stopped for few months)
+		- the plants in treatment groups should recover it's diameter showing no significant differences against non-treated plants
+
+
+
+
+
+
+
+
+

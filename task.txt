@@ -1,0 +1,13 @@
+Task
+- Prepare a clean Rmd file
+	- generate a clean html based on it
+- add a process in Rmd file to setup Renv and install required packages
+
+NOTE:
+- there is folder with Old analyses. 
+	You may check that to get some more overview and history of the analyses/experiment.
+- Follow the existing latest Rmd and Html for your work.
+- use the included word document (or even the dissertation chapter 2, experiment 1) 
+	- to get some insights about the experiment, tests, results.
+- if you have any questions please let me know.
+

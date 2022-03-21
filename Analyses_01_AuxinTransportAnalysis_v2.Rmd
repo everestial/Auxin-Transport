@@ -1,0 +1,552 @@
+---
+title: "Auxin Control Study September 2017 - March 2018"
+author: "Bishwa"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    number_sections: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+editor_options: 
+  chunk_output_type: console
+---
+
+# Section 01 - Prepare 
+## Loading Packages
+
+```{r setup, include= TRUE, message = FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstatix)
+library(emmeans)
+library(ggpubr)
+library(readxl)
+library(kableExtra) #I use it to format html tables
+library(sjPlot)
+#devtools::install_github("haozhu233/kableExtra")
+```
+
+
+## Read data
+
+**auxin.data** has datashet on Sheet1, rom A2: L37. Remarks says possible 
+outliers or contaminated data are; MY2:1 (row number 7), 12, and 24
+
+```{r readata}
+setwd("Z:/Upwork/Bishwa/Auxin Transport")
+path<- "./auxin_tranportData.xls"
+
+adata<- readxl::read_excel(path = path,sheet = "Sheet1",
+                    range = "A1:L37",col_names = TRUE)
+
+str(adata)
+```
+
+There are some inconsistent name variable names, lets change them.
+
+```{r cname}
+
+names(adata)<- c("sample", "population", "popID", "time", "hourZero", "cpm3H",
+                 "perError", "dpm3H", "eff-13H", "lumex", "elapTime", "fmol"
+                 )
+
+# change character to factor
+
+adata$population<- factor(adata$population,
+                     labels =  c("Mayodan","Spiterstulen"),
+                     levels =  c("MY", "SP")
+                     )
+
+# create replicate column for easyness
+ ## first remove observation with high error rate
+
+adata<- adata[-7,] # removing errenous observation
+
+## create replicates
+adata<- adata %>% group_by(population) %>% mutate(sid = 1:n())
+
+head(adata[,c(2, 13)], 10) %>% kbl() %>% kable_styling(full_width = FALSE)
+tail(adata[, c(2,13)], 10) %>% kbl() %>% kable_styling(full_width = FALSE)
+table(adata$population) %>% kbl() %>% kable_paper("hover", full_width = FALSE)
+
+adata<- adata %>% mutate(species = as.factor(popID))
+table(adata$species) %>% kbl() %>% kable_paper("hover", full_width = FALSE)
+```
+
+# Section 02 - Summary Statistics
+
+
+Now the data are cleaned, lets look at summary statistics
+
+## For Population
+
+The difference in mean is around 2400 
+```{r pop sum, echo=FALSE}
+
+(sum.data<- adata %>% group_by(population) %>% 
+  summarise(mean = mean(dpm3H), sd   = sd(dpm3H),
+            IQR = IQR(dpm3H),
+            "%25 Q" = quantile(dpm3H, .25),
+            "%50 Q" = quantile(dpm3H, .5),
+            "%75 Q" = quantile(dpm3H, .75)
+            ) %>%
+   kbl() %>%
+   kable_styling(full_width = FALSE)
+  
+)
+
+```
+
+## For Population and Species
+```{r species sum, echo=FALSE}
+
+(sum.data<- adata %>% group_by(population,species) %>% 
+  summarise(mean = mean(dpm3H), sd   = sd(dpm3H),
+            IQR = IQR(dpm3H),
+            "%25 Q" = quantile(dpm3H, .25),
+            "%50 Q" = quantile(dpm3H, .5),
+            "%75 Q" = quantile(dpm3H, .75)
+            ) %>%
+   kbl() %>%
+   kable_styling(full_width = FALSE)
+  
+)
+
+```
+
+# Section 03 - Check Assumptions for Parametric analysis
+
+## Overall Histogram
+```{r hist}
+grDevices::png(filename = "hist_all.png",  width = 12.5, height = 8, units = 'cm', res = 400)
+
+# data = adata
+(HistoPmani <- ggplot(data = adata,aes(x = dpm3H))+
+ geom_histogram(mapping = aes(y = ..density..),
+                   #breaks = (seq(-3,4, by = 1)),
+                   colour = "gray30",
+                   fill = "#00a896",
+                alpha = 0.6)+
+  geom_density(color = "#114b5f", size = 1.5) +
+  xlab(" Disintegration per minute (3H)") +
+  ylab("Density") +
+theme_classic()
+)
+
+dev.off()
+
+knitr::include_graphics("hist_all.png")
+```
+
+
+## For population
+
+### Histogram
+```{r pop hist}
+grDevices::png(filename = "hist_pop.png",  width = 12.5, height = 8, units = 'cm', res = 400)
+
+# data = adata
+(HistoPmani <- ggplot(data = adata,aes(x = dpm3H, fill = population, color = population))+
+   geom_histogram(
+                  #breaks = (seq(-3,4, by = 1)),
+                  alpha = 0.6
+                ) +
+    xlab("Disintegration per minute (3H)") +
+    ylab("Count") + 
+    scale_fill_manual("Population",values = c("#00AFBB", "#E7B800")) +
+    scale_color_manual("Population",values = c("#00AFBB", "#E7B800")) +
+    theme_classic()
+)
+
+dev.off()
+
+knitr::include_graphics("hist_pop.png")
+```
+
+### Outliers
+
+No outliers identified.
+```{r pop outlier}
+#----------- outlier
+(adata %>% group_by(population) %>% 
+  identify_outliers(dpm3H)) %>% kbl %>% kable_styling()
+
+# no outliers
+```
+
+### Normality
+
+Distribution for Mayodan seems to non-normal, while for Spiterstulen is more or less normal accroding to the Shapiro-test and graphs.
+```{r pop normality}
+#--------- Normality
+
+# normality of dat can be checked with shapiro.test() test 
+kable(adata %>% group_by(population) %>% 
+  shapiro_test(dpm3H)) %>% kable_styling(full_width = FALSE)
+
+grDevices::png(filename = "qq_pop.png",  width = 16.5, height = 10, units = 'cm', res = 400)
+
+#-------- QQ plot
+adata %>% ggplot(aes(sample = dpm3H, color = population), alpha = 0.8)+
+  geom_qq(  geom = "point",
+            position = "identity",
+            distribution = stats::qnorm,
+            size = 2)+
+  scale_color_manual("Population",values = c("#00AFBB", "#E7B800")) +
+  stat_qq_line(size = 1)+
+  facet_wrap(vars(population),scales = "free")+
+  xlab("Theoretical quantities") +
+  ylab("Disintegration per minute (3H)") +
+  theme_classic(12) +
+  theme(
+    legend.position = "none"
+  )
+
+dev.off()
+
+knitr::include_graphics("qq_pop.png")
+```
+
+
+### Homogenity
+
+Check Homogenity with Levene's test. This test for homogenity is less sensitive with the non-normal distributions.
+
+From the output above we can see that the p-value is not less than the significance level of 0.05. This means that there is no evidence to suggest that the variance across groups is statistically significantly different. Therefore, we can assume the homogeneity of variances in the different treatment groups.
+```{r pop homogenity}
+#------- Homogeneity of variances: Levene's test
+
+adata<- adata %>%  ungroup()
+
+(adata %>%  levene_test(dpm3H~population)) %>% kbl() %>% kable_styling(full_width = F)
+
+# observations have equal variances
+```
+
+## For Species
+
+### Outliers
+```{r species outliers}
+#----------- outlier
+adata %>% group_by(species) %>% 
+  identify_outliers(dpm3H) %>% kbl() %>% kable_styling(full_width = F)
+
+# one outlier
+```
+
+```{r}
+# This code to delete outlier but we ignore it
+
+#adata<- adata[-adata$sample[adata$sample == 21],] # I don't know but using
+# 21 deleted sample 22
+```
+
+### Normality
+
+Distributions are normal except of SP1 and SP2.
+```{r species normality}
+#--------- Normality
+
+# normality of dat can be checked with shapiro.test() test 
+adata %>% group_by(species) %>% 
+  shapiro_test(dpm3H) %>% kbl() %>% kable_styling(full_width = F)
+# when observation # & removed the Mayodan species is not longer normal
+
+grDevices::png(filename = "qq_species.png",  width = 16.5, height = 10, units = 'cm', res = 400)
+
+#-------- QQ plot
+adata %>% ggplot(aes(sample = dpm3H, color = population))+
+  geom_qq(  geom = "point",
+            position = "identity",
+            distribution = stats::qnorm,
+            size = 2)+
+  scale_color_manual("Population",values = c("#00AFBB", "#E7B800")) +
+  xlab("Theoretical quantities") +
+  ylab("Disintegration per minute (3H)") +
+  stat_qq_line()+
+  facet_wrap(vars(species),scales = "free") +
+  theme_classic(12) + 
+  theme(
+    legend.position = "none",
+  )
+
+dev.off()
+
+knitr::include_graphics("qq_species.png")
+```
+
+### Homogenty
+
+P-value is not below 0.05, hence, groups are homogenous.
+```{r species homogenity}
+#------- Homogeneity of variances: Levene's test
+
+adata %>% levene_test(dpm3H~species) %>% kbl() %>% kable_styling(full_width = F)
+
+# observations have equal variances
+```
+
+
+# Section 04 - Compare Populations
+
+## Box Plot and T-Test
+
+On the 10% level we can say that groups have different means. 
+```{r pop ttest}
+# H0:  mu(popSP): mu(popMY)
+# H1:  Not so
+
+(ptest<- adata %>% 
+  t_test(dpm3H ~ population, paired = FALSE)) %>% kbl() %>% kable_styling(full_width = F)
+
+# the means  dpm-3h of SP  is not statistically different from mean of dpm-3h MY at 5% level
+
+# create statistical plot
+
+grDevices::png(filename = "box_pop.png",  width = 12.5, height = 8, units = 'cm', res = 400)
+
+(boxplot<- adata %>% ggplot(aes(x = population, y = dpm3H, color = population))+
+  geom_boxplot(stat = "boxplot", alpha = 0.4)+
+  stat_summary(geom = "point", fun =  "mean", show.legend = FALSE)+
+  xlab( "Population")+
+  ylab(" Disintegration per minute (3H)")+
+  scale_y_continuous(limits = c(0, 25000))+
+  scale_color_manual("Population",values = c("#00AFBB", "#E7B800"))+
+  stat_pvalue_manual(ptest,label = "T-test, p = {p}", y.position = 20000) +
+  theme_classic(12) +
+  theme(#panel.border = element_blank(), # will equivalent to theme_clasifc()
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.line = element_line(colour = "black"))
+)
+
+dev.off()
+
+knitr::include_graphics("box_pop.png")
+
+```
+
+## Wilcoxon test
+
+Wilcoxon test is usually used to compare means when the assumption of the normal distribution is violated.
+
+The results are pretty the same as for T-test. Though p-value seems to be closer to 0.05 level this time.
+```{r pop wilcox}
+(wtest <- adata %>% 
+  wilcox_test(dpm3H ~ population, paired = FALSE)) %>% kbl() %>% kable_styling(full_width = F)
+```
+
+
+# Section 05 - Compare species
+
+## Boxplots
+
+In all cases means for Mayodan plants are a bit higher that those of Spiterstulen.
+```{r species box plots}
+
+grDevices::png(filename = "box_species.png",  width = 12.5, height = 8, units = 'cm', res = 400)
+
+( bplot_species<- adata %>% 
+    group_by(species) %>% mutate(N=n()) %>% 
+    mutate(N=ifelse(dpm3H==max(dpm3H,na.rm=T),paste0('n=',N),NA)) %>%
+    ggplot(aes(x = species, y = dpm3H, color = population, fill = population, label = N))+
+    geom_boxplot(stat = "boxplot", show.legend = TRUE, alpha = 0.2)+
+    geom_text(vjust = -1, hjust = 0.5, show.legend = FALSE) +
+    stat_summary(geom = "point", fun =  "mean", show.legend = FALSE)+
+    xlab( "Population")+
+    ylab(" Disintegration per minute (3H)")+
+    scale_y_continuous(limits = c(0, 25000))+
+    scale_fill_manual("Species",values = c("#00AFBB", "#E7B800"))+
+    scale_color_manual("Species",values = c("#00AFBB", "#E7B800"))+
+    theme(#panel.border = element_blank(), # will equivalent to theme_clasifc()
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      axis.line = element_line(colour = "black"))+
+    #stat_pvalue_manual(pwcs,label = "T-test, p.adj = {p.adj}",hide.ns = TRUE) +
+    theme_classic()
+  )
+
+dev.off()
+
+knitr::include_graphics("box_species.png")
+```
+
+
+
+## Anova by Species
+
+H0:  mu(species1)= mu(species2)  = ... = mu(species5)
+H1:  at least one mean is not equal
+
+Classic anova suggests that on 10% level there's a significant difference within groups.
+```{r species anova}
+# H0:  mu(species1)= mu(species2)  = ... = mu(species5)
+# H1:  at least one mean is not equal 
+
+# possible two way interaction
+
+# adata %>% anova_test(dv = dpm3H, wid = sp_id, within = c(species))
+
+(sp_test<- adata %>% anova_test(dpm3H ~ species,type = 3)) %>% 
+  kbl() %>% kable_styling(full_width = FALSE)
+
+#------------ global anova by specis is significant
+```
+
+We can also run anova with adjusted p-values, but the output is the same,
+```{r}
+sp_anova<-  adata %>% 
+  anova_test(
+    dv        = dpm3H,
+    wid       = sample,
+    between   = species,
+    type = 3)
+
+# extract the anova and adjust p-value
+main.spChange <- get_anova_table(sp_anova) %>% 
+  adjust_pvalue(method = "fdr")
+
+main.spChange %>%
+  kbl() %>%
+  kable_styling(full_width = FALSE)
+```
+
+
+## Tukey post-hoc test
+
+We run Tukey test to compare each pair of factors.
+
+The only pair to have a significant difference (on 10% level) is MY1-SP1.
+```{r species tukey}
+#------------------- which groups are significant??
+
+# Pairwise comparisons
+pwcs<- adata %>% tukey_hsd(dpm3H ~ species)
+
+pwcs %>% 
+  mutate(estimate = cell_spec(round(estimate, 2), color = ifelse(estimate >= 0, "black","red")),
+         conf.low = cell_spec(round(conf.low, 2), color = ifelse(conf.low >= 0, "black", "red")),
+         p.adj = cell_spec(round(p.adj, 4), bold = ifelse(p.adj >= 0.1, FALSE, TRUE))) %>%
+  kbl(escape = FALSE) %>% 
+  kable_styling(full_width = FALSE)
+
+#Visualize comparison
+grDevices::png(filename = "tukey_species.png",  width = 12.5, height = 8, units = 'cm', res = 400)
+
+pwcs %>% 
+  mutate(comparison = factor(paste0(group1,"-",group2), levels = rev(paste0(group1,"-",group2)))) %>%
+  ggplot(aes(x = estimate, y = comparison)) +
+  geom_point() +
+  geom_errorbar(aes(x = estimate, y = comparison,
+                    xmax = conf.high, xmin = conf.low),
+                width = 0.5) +
+  #scale_y_discrete(limits = rev(levels(species))) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+  ylab( "Population")+
+  xlab(" Disintegration per minute (3H)")+
+  theme(#panel.border = element_blank(), # will equivalent to theme_clasifc()
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      axis.line = element_line(colour = "black"))+
+  theme_classic()
+
+dev.off()
+
+knitr::include_graphics("tukey_species.png")
+
+pwcs<- pwcs %>% add_xy_position(x = "species")
+```
+
+## Pairwise comparison
+
+To compare with the results of Tukey test, we run usually pairwise comparison.
+
+It also shows that pair M1-SP1 is significant. In addition, mean difference for MY1-SP2 is also significant.
+However, if take a look on the adjusted p-value, all the pairs do not have statistically significant difference. Though, the pairs discussed above are the closest to pass 10% level.
+```{r species pairwise}
+adata %>% pairwise_t_test(formula = dpm3H ~species, p.adjust.method = "fdr") %>% 
+  mutate(p = cell_spec(round(p, 5), bold = ifelse(p.signif == "ns", FALSE, TRUE)),
+         p.signif = cell_spec(p.signif, bold = ifelse(p.signif == "ns", FALSE, TRUE))) %>%
+  kbl(escape = FALSE) %>%
+  kable_styling(full_width = FALSE)
+```
+
+## Regression
+
+If we ran a regression then on 10% level, MY2 can be considered to have a lower average.
+```{r species reg}
+tab_model(lm(dpm3H ~ species, data = adata))
+```
+
+
+# Section 06 - Nested Analysis
+
+Let's create ids first
+```{r ids}
+## create replicates
+adata<- adata %>% group_by(population, species) %>% mutate(sp_id = 1:n()) %>% ungroup()
+```
+
+## Population/Species
+
+Population seems significant
+```{r}
+adata %>% anova_test(dpm3H ~ population/species) %>% kbl() %>% kable_styling()
+```
+
+
+## Population/ids
+
+Population seems significant
+```{r}
+adata %>% anova_test(dpm3H ~ population/sp_id) %>% kbl() %>% kable_styling()
+```
+
+## Species/ids
+
+Species seems significant
+```{r}
+adata %>% anova_test(dpm3H ~ species/sp_id) %>% kbl() %>% kable_styling()
+```
+
+Interaction effect when species is nested within the population is not significant, therefore, you can rely on species effect on dpm or population effect on dpm
+
+
+# Section 07 - Mixed Models
+
+I run some mixed models more for interest. But bot sure whether there's a need to include them in the final text.
+
+## Population + random id
+```{r}
+dglme_pop<- lme4::lmer(dpm3H~population +(1|sp_id), data = adata)
+
+anova(dglme_pop, type = 3)
+tab_model(dglme_pop)
+```
+
+## Species + random id
+```{r}
+dglme_s<- lme4::lmer(dpm3H~species +(1|sp_id), data = adata)
+
+anova(dglme_s, type = 3)
+tab_model(dglme_s)
+```
+
+## population/species + random id
+```{r}
+dglme_pops<- lme4::lmer(dpm3H~population/species +(1|sp_id), data = adata)
+
+anova(dglme_pops, type = 3)
+tab_model(dglme_pops)
+```
+
+
+```{r sessioninfo}
+
+sessionInfo()
+
+```

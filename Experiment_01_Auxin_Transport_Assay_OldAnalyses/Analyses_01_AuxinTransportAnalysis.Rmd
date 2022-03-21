@@ -1,0 +1,394 @@
+---
+title: "Auxin Control Study September 2017 - March 2018"
+author: "Bishwa"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    number_sections: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+editor_options: 
+  chunk_output_type: console
+---
+
+# Section 01
+## Loading Packages
+
+```{r setup, include= TRUE, message = FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(rstatix)
+library(emmeans)
+library(ggpubr)
+library(readxl)
+```
+
+## Read data
+
+**auxin.data** has datashet on Sheet1, rom A2: L37. Remarks says possible 
+outliers or contaminated data are; MY2:1 (row number 7), 12, and 24
+
+```{r readata}
+path<- "./Experiment_01_Auxin_Transport_Assay/auxin_tranportData.xls"
+
+adata<- readxl::read_excel(path = path,sheet = "Sheet1",
+                    range = "A1:L37",col_names = TRUE)
+str(adata)
+
+```
+
+There are some inconsistent name variable names, lets change them.
+
+```{r cname}
+
+names(adata)<- c("sample", "population", "popID", "time", "hourZero", "cpm3H",
+                 "perError", "dpm3H", "eff-13H", "lumex", "elapTime", "fmol"
+                 )
+
+# change character to factor
+
+adata$population<- factor(adata$population,
+                     labels =  c("Mayodan","Spiterstulen"),
+                     levels =  c("MY", "SP")
+                     )
+
+# create replicate column for easyness
+ ## first remove observation with high error rate
+
+adata<- adata[-7,] # removing errenous observation
+
+## create replicates
+adata<- adata %>% group_by(population) %>% mutate(sid = 1:n())
+
+head(adata[,c(2, 13)], 10)
+tail(adata[, c(2,13)], 10)
+table(adata$population)
+
+adata<- adata %>% mutate(species = as.factor(popID))
+table(adata$species)
+```
+
+# Section 02
+## Summary Statistics
+
+Now the data are cleaned, lets look at summary statistics
+
+```{r sum, echo=FALSE}
+
+(sum.data<- adata %>% group_by(population,species) %>% 
+  summarise(mean = mean(dpm3H), sd   = sd(dpm3H),
+            IQR = IQR(dpm3H),
+            "%25 Q" = quantile(dpm3H, .25),
+            "%50 Q" = quantile(dpm3H, .5),
+            "%75 Q" = quantile(dpm3H, .75)
+            )
+ 
+)
+
+```
+
+# Section 03
+## Check Assumptions for Parametric analysis: two groups 
+
+
+```{r assumption}
+
+# data = adata
+(HistoPmani <- ggplot(data = adata,aes(x = dpm3H))+
+ geom_histogram(mapping = aes(y = ..density..),
+                   #breaks = (seq(-3,4, by = 1)),
+                   colour = "gray30",
+                   fill = "gray")+
+theme_classic(10)
+)
+
+
+#----------- outlier
+adata %>% group_by(population) %>% 
+  identify_outliers(dpm3H)
+
+# no outliers
+
+#--------- Normality
+
+# normality of dat can be checked with shapiro.test() test 
+adata %>% group_by(population) %>% 
+  shapiro_test(dpm3H)
+
+#-------- QQ plot
+adata %>% ggplot(aes(sample = dpm3H))+
+  geom_qq(  geom = "point",
+            position = "identity",
+            distribution = stats::qnorm)+
+  stat_qq_line()+
+  facet_wrap(vars(population),scales = "free")+
+  theme_bw(12)
+
+#------- Homogeneity of variances: Levene's test
+
+adata<- adata %>%  ungroup()
+
+(adata %>%  levene_test(dpm3H~population))
+
+# observations have equal variances
+
+```
+
+
+# Section 04
+## Paired T-Test by populaton
+
+```{r histo}
+# H0:  mu(popSP): mu(popMY)
+# H1:  Not so
+
+(ptest<- adata %>% 
+  t_test(dpm3H ~ population, paired = FALSE))
+
+# the means  dpm-3h of SP  is not statistically different from mean of dpm-3h MY at 5% level
+
+# create statistical plot 
+
+(boxplot<- adata %>% ggplot(aes(x = population, y = dpm3H, color = population))+
+  geom_boxplot(stat = "boxplot")+
+  stat_summary(geom = "point", fun =  "mean", show.legend = FALSE)+
+  xlab( "Population")+
+  ylab(" Disintegration per minute (3H)")+
+  scale_y_continuous(limits = c(0, 25000))+
+  scale_color_manual("Population",values = c("Purple","Blue"))+
+  theme(#panel.border = element_blank(), # will equivalent to theme_clasifc()
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.line = element_line(colour = "black"))
+)
+
+# Add the p-value manually
+(boxplot<- boxplot + stat_pvalue_manual(ptest,label = "T-test, p = {p}", y.position = 20000)+theme_classic(12))
+
+```
+
+# Section 04:- split by population
+
+
+```{r anovaTEST}
+
+ 
+#----------- outlier
+adata %>% group_by(species) %>% 
+  identify_outliers(dpm3H)
+
+# one outlier
+
+#adata<- adata[-adata$sample[adata$sample == 20],] # I don't know but using
+# 21 deleted sample 22
+
+#--------- Normality
+
+# normality of dat can be checked with shapiro.test() test 
+adata %>% group_by(population) %>% 
+  shapiro_test(dpm3H)
+# when observation # & removed the Mayodan species is not longer normal
+
+#-------- QQ plot
+adata %>% ggplot(aes(sample = dpm3H))+
+  geom_qq(  geom = "point",
+            position = "identity",
+            distribution = stats::qnorm)+
+  stat_qq_line()+
+  facet_wrap(vars(population),scales = "free")+
+  theme_bw(12)
+
+#------- Homogeneity of variances: Levene's test
+
+adata %>%  levene_test(dpm3H~population)
+
+# observations have equal variances
+```
+
+
+# Section 05
+## Anova by species/Individuals
+
+```{r anovaSpecies}
+# H0:  mu(species1)= mu(species2)  = ... = mu(species5)
+# H1:  at least one mean is not equal 
+
+# possible two way interaction
+
+## create replicates
+adata<- adata %>% group_by(population, species) %>% mutate(sp_id = 1:n()) %>% ungroup()
+
+# adata %>% anova_test(dv = dpm3H, wid = sp_id, within = c(species))
+
+(sp_test<- adata %>% anova_test(dpm3H ~ species,type = 3))
+
+
+
+#------------ global anova by specis is significant
+
+
+#------------------- which groups are significant??
+
+# Pairwise comparisons
+pwcs<- adata %>% tukey_hsd(dpm3H ~ species)
+
+pwcs
+
+pwcs<- pwcs %>% add_xy_position(x = "species")
+
+ggboxplot(adata, x = "species", y = "dpm3H") +
+  stat_pvalue_manual(pwcs, hide.ns = TRUE)
+
+# the means  dpm-3h of SP  is not statistically different from mean of dpm-3h MY 
+
+# create statistical plot 
+
+( bplot_species<- adata %>% ggplot(aes(x = species, y = dpm3H, color = population))+
+  geom_boxplot(stat = "boxplot", show.legend = TRUE)+
+  stat_summary(geom = "point", fun =  "mean", show.legend = FALSE)+
+  xlab( "Population")+
+  ylab(" Disintegration per minute (3H)")+
+  scale_y_continuous(limits = c(0, 25000))+
+   scale_color_manual("Population",values = c("Purple","Blue"))+
+  theme(#panel.border = element_blank(), # will equivalent to theme_clasifc()
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.line = element_line(colour = "black"))+
+     stat_pvalue_manual(pwcs, hide.ns = TRUE)
+)
+
+(bplot_species<- bplot_species + stat_pvalue_manual(pwcs,label = "T-test, p.adj = {p.adj}",hide.ns = TRUE)+theme_classic())
+                                                    
+```
+
+##  Anova by Interpretation by species
+
+```{r anoReport}
+#AnovaTable
+sp_test %>% get_anova_table()
+
+
+sp_anova<-  adata %>% 
+  anova_test(
+    dv        = dpm3H,
+    wid       = sample,
+    between   = species,
+    type = 3)
+sp_anova
+# extract the anova and adjust p-value
+main.spChange<- get_anova_table(sp_anova) %>% 
+  adjust_pvalue(method = "fdr")
+main.spChange
+#---- pairwise comparisons
+# multiple pairwise comparisons,
+# usually after global anova is significant people usually use 
+# tukey post-hock test which adjust p values
+# however,same results canbe obtained from pair-wise_t-test, 
+# don't get confused thining they are different.
+
+# See below all approaches gives you the similar results 
+
+# Method 1: HSD
+mct<- adata %>% tukey_hsd(dpm3H ~species)
+
+# Method2: fdr adjusted
+
+adata %>% pairwise_t_test(formula = dpm3H ~species, p.adjust.method = "fdr")
+
+# Method 3: bonferroni adjusted
+
+adata %>% pairwise_t_test(formula = dpm3H ~species, p.adjust.method = "bonferroni")
+# same result; see plot above
+
+
+#----- 
+
+```
+
+## Interpretation
+
+The anova table
+
+`r data.frame(main.spChange)[]`
+
+
+Above table indices that
+
+there is a statistically significant difference in mean Disintegration per minute score
+exists among different species (here I called species for individual in your data),
+F(`r main.spChange[1,2]`, `r main.spChange[1,3]`) = `r main.spChange[1,4]`, 
+p = `r main.spChange[1,8]`
+
+Based on Table below
+
+```{r mctTable}
+mct
+```
+
+The tukey's post-hoc test shows that only  MY1 and SP1 are statistically different
+(p.adj = `r mct[3,8]`)
+
+```{r NestTed}
+
+# #---------- aov approach
+# 
+aov_nest<- aov(formula = dpm3H ~ population/sp_id, data = adata)
+
+summary(aov_nest)
+#--- no interaction 
+
+adata$sp_id<- as.factor(adata$sp_id)
+
+ 
+aov_lm<- lm(dpm3H ~ population * sp_id, data = adata)
+
+aov_lm
+
+int_anova<- adata %>% anova_test(dpm3H ~ population * sp_id,type = 3)
+
+int_anova
+
+# no main and interaction effect
+ 
+# only population  main effects  
+
+main_pop.spp<- adata %>% group_by(population) %>% anova_test(dpm3H ~ sp_id, error = aov_lm)
+
+ 
+
+ main_pop.spp
+
+```
+
+
+
+```{r finteraction}
+
+int_anova_1<- adata %>% anova_test(dpm3H ~ population * sp_id)
+
+
+(int_anova_1)
+
+# pairwise comparisons
+pwc <- adata %>% 
+  group_by(population) %>%
+  emmeans_test(dpm3H ~ sp_id, p.adjust.method = "bonferroni") 
+pwc
+
+# Re verification of no interaction effect
+
+
+```
+
+Interaction effect when species is nested within the population is not significant, therefore, you can rely on species effect on dpm or population effect on dpm
+
+
+```{r sessioninfo}
+
+sessionInfo()
+
+```
